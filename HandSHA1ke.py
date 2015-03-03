@@ -3,7 +3,7 @@ import hashlib, sys, base64
 # Author: Tim Gowan
 # Date : Tue, 3 Mar 2015 15:00:43 CST 
 # Description: 
-#   a program that generates the correct WebSocket Protocol reply based on a Sec-WebSocket-Key command line argument.
+#   a program that prints the correct WebSocket Protocol reply based on a Sec-WebSocket-Key command line argument.
 # 
 #Pseudocode (From Wikipedia): 
 #   The client sends a Sec-WebSocket-Key which is a random value that has been base64 encoded.
@@ -33,7 +33,7 @@ n=m.hexdigest() #digest concatenated string
 c=base64.b64encode(n)
 #x=base64.b64decode(c)#for testing purposes
 
-print c
+print c # 'c' variable is the Sec-WebSocket-Accept
 
 
 exit()
