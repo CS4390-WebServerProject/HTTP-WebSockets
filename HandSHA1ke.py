@@ -9,7 +9,7 @@ import hashlib, sys, base64
 #   The client sends a Sec-WebSocket-Key which is a random value that has been base64 encoded.
 #   To form a response, the GUID 258EAFA5-E914-47DA-95CA-C5AB0DC85B11 is appended to this base64 encoded key. 
 #   The base64 encoded key will not be decoded first.
-#   The resulting string is then hashed with SHA-1, then base64 encoded. 
+#   The resulting string is then hashed with SHA-1, then base64 encoded.
 #   Finally, the resulting reply occurs in the header Sec-WebSocket-Accept.
 #
 ###############################################################################################
@@ -21,8 +21,8 @@ GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 m=hashlib.sha1()
 
 #Use CommandLineArgument for initial string to hash
-if len(sys.argv) == 1:
-    m.update('dGhlIHNhbXBsZSBub25jZQ==') #replace input string here with argv
+if len(sys.argv) == 2:
+    m.update(sys.argv[1]) #replace input string here with the Sec-WebSocket-Key
 else:
     print 'Usage: HandSHA1ke.py [Base64 input string from initial handshake request]'
     exit()
