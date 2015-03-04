@@ -21,19 +21,7 @@ GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 m=hashlib.sha1()
 
 #Use CommandLineArgument for initial string to hash
-if len(sys.argv) == 2:
-    m.update(sys.argv[1]) #replace input string here with the Sec-WebSocket-Key
-else:
-    print 'Usage: HandSHA1ke.py [Base64 input string from initial handshake request]'
-    exit()
-m.update(GUID) #append GUID to base input
-n=m.hexdigest() #digest concatenated string
+def handShakeSHA(webSocketKey):
+    return base64.b64encode(hashlib.sha1(webSocketKey+GUID).digest())
 
-#print n #Print the hashed string before base64 encoding
-c=base64.b64encode(n)
-#x=base64.b64decode(c)#for testing purposes
-
-print c # 'c' variable is the Sec-WebSocket-Accept
-
-
-exit()
+print(handShakeSHA(unicode("dGhlIHNhbXBsZSBub25jZQ==")))
