@@ -64,17 +64,15 @@ class ResponseHeader:
         self.statusCode = statusCode
         self.reason = reason
         
-        self.messageKeys = []
-        self.message = {}
+        self.messages = []
     
     def addMessage(self, header, message):
-        list.append((header,)
-        self.message[header] = str(message)
+        self.messages.append((str(header), str(message)))
     
     def generateMessage(self):
         joinedMessage = ''
         joinedMessage = self.httpVer + ' ' + str(self.statusCode) + ' ' + self.reason + '\r\n'
-        for key, value in self.message.iteritems():
-            joinedMessage += key + ': ' + value + '\r\n'
+        for mess in self.messages:
+            joinedMessage += mess[0] + ': ' + mess[1] + '\r\n'
             
         return joinedMessage + '\r\n'
