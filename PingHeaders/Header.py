@@ -39,6 +39,10 @@ class RequestHeader:
             contentType = 'audio/mpeg'
         elif extension == 'webm':
             contentType = 'audio/webm'
+        elif extension == 'png':
+            contentType = 'image/png'
+        elif extension == 'jpg':
+            contentType = 'image/jpeg'
         else:
             contentType = 'multipart/mixed'
         
@@ -60,9 +64,11 @@ class ResponseHeader:
         self.statusCode = statusCode
         self.reason = reason
         
+        self.messageKeys = []
         self.message = {}
     
     def addMessage(self, header, message):
+        list.append((header,)
         self.message[header] = str(message)
     
     def generateMessage(self):
