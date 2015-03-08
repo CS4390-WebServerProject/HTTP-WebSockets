@@ -48,6 +48,8 @@ class RequestHeader:
         
         # Store into dictionary
         self.message = {}
+        self.acceptEncodings = []
+        self.requestFinished = False
         
         self.message['Content-Type'] = contentType
         
@@ -55,7 +57,18 @@ class RequestHeader:
             if mess is not '':
                 mess = mess.split(": ")
                 # Fill the message dictionary
-                self.message[mess[0]] = mess[1];
+                if mess[0] == 'Accept-Encoding':
+                    self.acceptEncodings = mess[1].split(", ")
+                else:
+                    self.message[mess[0]] = mess[1]
+            else:
+                self.requestFinished = True
+
+    def canAcceptEncoding(self, encoding):
+        if encoding in self.acceptEncodings:
+            return True
+
+        return False
             
 class ResponseHeader:
     def __init__(self, httpVer, statusCode, reason, delimeter='\r\n'):

@@ -3,4 +3,19 @@ body {
     font-family: Arial, 'Open Sans', sans-serif;
     font-size: 14px;
     color: #333;
+	margin: 0;
+	padding: 0;
+}
+
+header {
+	background: #304375;
+	border-bottom: solid 2px #152A65;
+}
+
+header h1 {
+	color: #FFF;
+	font-size: 28px;
+	font-weight: 300;
+	margin: 0;
+	padding: 15px 10px;
 }
