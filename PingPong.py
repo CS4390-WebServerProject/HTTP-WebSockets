@@ -1,12 +1,13 @@
 #!/usr/bin/python
+from __future__ import unicode_literals
 from PingPong.HTTPDate import HTTPDate
 from PingPong.Header import RequestHeader, ResponseHeader
 from PingPong.PingConf import PingConf
-import sys, os, thread, StringIO, gzip, time, socket, select
+import sys, os, threading, io, gzip, time, socket, select
 
 
 def gzipCompress(str):
-    out = StringIO.StringIO()
+    out = io.io()
     with gzip.GzipFile(fileobj=out, mode='w') as f:
         f.write(str)
 
@@ -22,7 +23,9 @@ def handler(clientSock, addr, config):
 
     # Timeout of when to close the connection when there appears to be no data left
     # We set it to 30s
-    timeout = 5
+    timeout = 15
+
+    hasMessage = False
 
     clientSock.setblocking(0)
 
@@ -32,20 +35,19 @@ def handler(clientSock, addr, config):
     while connectionOpen:
         headReq = False
         notFound = False
-        hasMessage = False
 
         ready = select.select([clientSock], [], [], timeout)
 
         # HTTP Request message should be no more than 1MB
         try:
-            message = clientSock.recv(1024)
+            message = clientSock.recv(1024).decode('unicode_escape')
             hasMessage = True
         except socket.error:
             hasMessage = False
 
         # Organize request messages
-        if ready[0]:
-            print("REQUEST:\n" + message)
+        if ready[0] and message != '':
+            print(u"REQUEST:\n" + message)
             request = RequestHeader(message)
             httpVer = request.httpVer
 
@@ -77,6 +79,9 @@ def handler(clientSock, addr, config):
                 response.addMessage('Date', HTTPDate())
                 response.addMessage('Server', 'PingPongServer')
 
+                if request.message['Connection'] == 'keep-alive':
+                    response.addMessage('Connection', 'keep-alive')
+
                 # Check if client supports gzip encoding
                 if request.canAcceptEncoding('gzip') and config.conf['gzip'] == 'on':
                     body = gzipCompress(body)
@@ -85,12 +90,13 @@ def handler(clientSock, addr, config):
                 response.addMessage('Content-Length', len(body))
                 response.addMessage('Content-Type', request.message['Content-Type'] + '; charset=UTF-8')
 
-            print("RESPONSE:\n" + response.generateMessage())
+            print(u"RESPONSE:\n" + response.generateMessage())
 
             if headReq:
                 clientSock.sendall(response.generateMessage())
             else:
-                clientSock.sendall(response.generateMessage() + body)
+                totalResponse = response.generateMessage() + body
+                clientSock.sendall(totalResponse.encode('utf-8'))
                 
             if 'Connection' in request.message:
                 if request.message['Connection'] == 'close':
@@ -111,18 +117,25 @@ def init(port):
         serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         serverSocket.bind(('', port))
         serverSocket.listen(2);
+        threads = []
+        startServer = True
         
-        while True:
+        while startServer:
             # We are looking for any interrupts
             try:
                 print('Ready to serve...')
                 clientSock, addr = serverSocket.accept()
-                thread.start_new_thread(handler, (clientSock, addr, config))
+                t = threading.Thread(target=handler, args=(clientSock, addr, config))
+                threads.append(t)
+                t.start()
                 
             except KeyboardInterrupt:
                 # Ending the server
                 print('Server is now closing...')
-                break
+                startServer = False
+                # Close any existing client connections
+                for t in threads:
+                    t.join()
         
         # Close server 
         serverSocket.close()
