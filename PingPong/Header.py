@@ -54,7 +54,7 @@ class RequestHeader:
         self.message['Content-Type'] = contentType
         
         for mess in messageArr[1:]:
-            if mess is not '':
+            if mess is not u'':
                 mess = mess.split(": ")
                 # Fill the message dictionary
                 if mess[0] == 'Accept-Encoding':
