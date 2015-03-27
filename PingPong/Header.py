@@ -10,7 +10,11 @@ class RequestHeader:
         self.reqLocation = 'index.html' if req[1] == '/' else req[1][1:]
         self.httpVer = req[2]
         
-        extension = self.reqLocation.split('.')[1]
+        try:
+            extension = self.reqLocation.split('.')[1]
+        except IndexError:
+            extension = ''
+
         contentType = ''
         
         if extension =='html':

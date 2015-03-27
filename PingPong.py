@@ -20,6 +20,7 @@ def handler(clientSock, addr, config):
 
     # We will default to HTTP/1.1 unless otherwise by client
     httpVer = 'HTTP/1.1'
+    message = ''
 
     # Timeout of when to close the connection when there appears to be no data left
     # We set it to 30s
