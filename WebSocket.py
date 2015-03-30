@@ -3,10 +3,15 @@ import sys
 import socket
 import threading
 import select
+import time
+import binascii
 from PingPong.Header import RequestHeader, ResponseHeader
 from base64 import b64encode
 from hashlib import sha1
-from StringIO import StringIO
+try:
+    from StringIO import StringIO, BytesIO
+except ImportError:
+    from io import StringIO, BytesIO
 
 class PingPongWebSocket:
 
@@ -53,22 +58,35 @@ class PingPongWebSocket:
         self.serverSocket.close()
 
     def parseFrame(self, frame):
-        buff = StringIO(frame)
+        buff = BytesIO(frame)
 
-        shortStruct = struct.Struct('H')
-        longStruct = struct.Struct('Q')
-        intStruct = struct.Struct('I')
-        charStruct = struct.Struct('c')
+        # Char
+        cCharStruct = struct.Struct('!c')
 
-        # First byte (fin and opcode)
+        # 16 bit
+        shortStruct = struct.Struct('!H')
+
+        # 64 bit
+        longStruct = struct.Struct('!Q')
+
+        # 32 bit
+        intStruct = struct.Struct('!I')
+
+        # 8 bit
+        charStruct = struct.Struct('!B')
+
+        # First byte (fin and opCode)
         finOp = ord(buff.read(1))
+
         finBit = (finOp & 128) >> 7
         opCode = finOp & 0x0f
-
 
         if opCode == 0x8:
             buff.close()
             return None
+        elif opCode == 0xA:
+            # Pong reply
+            return [opCode, True]
         else:
             # Second byte (mask and payload)
             maskPayload = ord(buff.read(1))
@@ -81,9 +99,9 @@ class PingPongWebSocket:
             extendedPayload = 0
 
             if payload == 126:
-                extendedPayload = shortStruct.unpack(buff.read(2))
+                extendedPayload = shortStruct.unpack(buff.read(2))[0]
             elif payload == 127:
-                extendedPayload = longStruct.unpack(buff.read(8))
+                extendedPayload = longStruct.unpack(buff.read(8))[0]
 
             payload = extendedPayload + payload
 
@@ -91,32 +109,49 @@ class PingPongWebSocket:
 
             # Get encoded text
             encodedText = buff.read(payload)
-            decodedTextIO = StringIO()
+            decodedTextIO = BytesIO()
 
             for i in range(0, payload):
-                decodedTextIO.write(chr(ord(encodedText[i]) ^ ord(maskingKey[i % 4])))
+                if sys.version_info > (3, 0):
+                    decodedTextIO.write(chr(encodedText[i] ^ maskingKey[i % 4]))
+                else:
+                    decodedTextIO.write(chr(ord(encodedText[i]) ^ ord(maskingKey[i % 4])))
+
 
             decodedText = decodedTextIO.getvalue()
 
             buff.close()
             decodedTextIO.close()
 
-            return decodedText
+            return [opCode, decodedText]
 
-    def makeFrame(self, text, fin=None):
-        buff = StringIO()
 
-        if fin == None:
-            fin = True
-            finBit = 1 << 7
+    def hasOpcode(self, frame, opCode):
+        if sys.version_info > (3, 0):
+            finOp = frame[0]
         else:
-            fin = False
-            finBit = 0
+            finOp = ord(frame[0])
 
-        opcode = 0x1 if fin else 0x0
+        finBit = (finOp & 128) >> 7
+        opCodeFrame = finOp & 0x0f
+
+        return opCode == opCodeFrame
+
+    def sendPing(self, clientSock):
+        pingFrame = self.makeFrame("Are you there?", 0x9);
+        clientSock.sendall(pingFrame);
+
+    def makeFrame(self, text, opCode=None, finArg=None):
+        buff = BytesIO()
+
+        fin = True if (finArg == None or finArg == True) else False
+        finBit = (1 << 7) if fin else 0
+
+        if opCode == None:
+            opCode = 0x1 if fin else 0x0
 
         # 8 bit
-        s = struct.Struct('>c')
+        s = struct.Struct('>B')
 
         # 16 bit
         eP = struct.Struct('>2s')
@@ -124,19 +159,22 @@ class PingPongWebSocket:
         # 64 bit
         eE = struct.Struct('>8s')
 
-        buff.write(s.pack(chr(finBit + opcode)))
+        buff.write(s.pack(finBit + opCode))
 
         if len(text) <= 125 and len(text) >= 0:
-            buff.write(s.pack(chr(len(text))))
+            buff.write(s.pack(len(text)))
+            print(buff.getvalue())
         # text can fit within a 16 bit unsigned int
         elif len(text) > 125 and len(text) <= 0xff:
-            buff.write(s.pack(chr(126)))
+            buff.write(chr(126))
             buff.write(eP.pack(len(text)))
         elif len(text) > 125 and len(text) <= 0xffffffff:
-            buff.write(s.pack(chr(127)))
-            buff.write(eE.pack(len(text)))
+            buff.write(chr(127))
+            buff.write(eE.pack(chr(len(text))))
 
-        buff.write(text)
+        #buff.write(text.encode('utf-8'))
+        for ch in text:
+            buff.write(ch.encode('utf-8'))
 
         resStr = buff.getvalue()
 
@@ -149,79 +187,110 @@ class PingPongWebSocket:
         gotHandshake = False
         message = ''
         timeout = 5
+        startPing = time.time() * 1000  # In milliseconds
+        endPing = time.time() * 1000
+        noPongCount = 0
+        msPingDelay = 5000
+        waitingForPong = False
+
         indexOffset = self.indexOffset
         clientSock.setblocking(0)
 
         ready = select.select([clientSock], [], [], timeout)
 
         while running and self.startServer:
+            # Update IO
+            ready = select.select([clientSock], [], [], timeout)
+            # Update time
+            endPing = time.time() * 1000
+
+            # Ping client every [msPingDelay] ms after handshake
+            if gotHandshake and endPing - startPing >= msPingDelay:
+                if not waitingForPong:
+                    self.sendPing(clientSock)
+                    waitingForPong = True
+                elif noPongCount < 3:
+                    # No pong reply recieved
+                    noPongCount += 1
+                else:
+                    # Client is not responding. Disconnected
+                    running = False
+
             try:
-                ready = select.select([clientSock], [], [], timeout)
-                strStruct = struct.Struct('1024s')
+                message = clientSock.recv(1024)
+            except socket.error:
+                message = ''
 
-                try:
-                    message = clientSock.recv(1024).decode('unicode_escape')
-                    print("Message: " + message)
-                except socket.error:
-                    message = ''
+            if ready[0] and len(message) > 0:
+                # Initial step: handshake
+                if not gotHandshake:
+                    request = RequestHeader(message.decode('utf-8'))
 
-                if ready[0] and message != '':
-                    # Initial step: handshake
-                    if not gotHandshake:
-                        request = RequestHeader(message)
+                    print("Request URL:" + request.reqLocation)
+                    print("Request Hostname: " + request.message['Host'][0])
 
-                        print("Request URL:" + request.reqLocation)
-                        print("Request Hostname: " + request.message['Host'])
+                    if request.reqLocation == self.uri:
+                        hostname = self.hostname + ':' + str(self.port)
 
-                        if request.reqLocation == self.uri:
-                            hostname = self.hostname + ':' + str(self.port)
+                        if request.message['Host'][0] == hostname:
+                            print(request.message['Upgrade'])
+                            print(request.message['Connection'])
+                            if 'websocket' in request.message['Upgrade']  and 'Upgrade' in request.message['Connection']:
+                                webSocketKey = request.message['Sec-WebSocket-Key'][0]
+                                webSocketVer = request.message['Sec-WebSocket-Version'][0]
 
-                            if request.message['Host'] == hostname:
-                                if request.message['Upgrade'] == 'websocket' and request.message['Connection'] == 'Upgrade':
-                                    webSocketKey = request.message['Sec-WebSocket-Key']
-                                    webSocketVer = request.message['Sec-WebSocket-Version']
+                                print("Web Socket Key: " + webSocketKey)
+                                print("Web Socket Ver: " + webSocketVer)
 
-                                    print("Web Socket Key: " + webSocketKey)
-                                    print("Web Socket Ver: " + webSocketVer)
+                                # Build magic
+                                magic = webSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+                                accept = b64encode(sha1(magic.encode('utf-8')).digest())
 
-                                    # Build magic
-                                    magic = webSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-                                    accept = b64encode(sha1(magic.encode('utf-8')).digest())
+                                response = ResponseHeader(request.httpVer, 101, "Switching Protocols")
+                                response.addMessage("Upgrade", "websocket")
+                                response.addMessage("Connection", "Upgrade")
+                                response.addMessage("Sec-WebSocket-Accept", accept.decode('utf-8'))
 
-                                    response = ResponseHeader(request.httpVer, 101, "Switching Protocols")
-                                    response.addMessage("Upgrade", "websocket")
-                                    response.addMessage("Connection", "Upgrade")
-                                    response.addMessage("Sec-WebSocket-Accept", accept.decode('utf-8'))
+                                print(response.generateMessage())
+                                print(len(response.generateMessage()))
 
-                                    clientSock.sendall(response.generateMessage().encode('utf-8'))
+                                clientSock.sendall(response.generateMessage().encode('utf-8'))
 
-                                    gotHandshake = True
-                            else:
-                                running = False
+                                gotHandshake = True
                         else:
                             running = False
                     else:
+                        running = False
+                else:
+                    if self.hasOpcode(message, 0x1):
                         print("Got message!")
                         text = self.parseFrame(message)
-                        
                         if text != None:
                             for sock in self.clients:
-                                sock.sendall(self.makeFrame(text))
+                                if text[0] == 0x1:
+                                    messageBack = self.makeFrame(text[1])
+                                    if sock.sendall(messageBack) != None:
+                                        print("Uh oh! Error sending!")
                         else:
                             running = False
+                    elif self.hasOpcode(message, 0xA):
+                        # Pong
+                        waitingForPong = False
+                        noPongCount = 0
+                    elif self.hasOpcode(message, 0x8):
+                        running = False
 
-            except KeyboardInterrupt:
-                running = False
 
         clientSock.close();
-
+        print("Closing...")
+        """
         self.lock.acquire()
         try:
             # Remove socket from client list
             self.clients.pop(index - self.indexOffset - 1)
-            self.indexOffset = self.indexOffset - 1
+            self.indexOffset += 1
         finally:
-            self.lock.release()
+            self.lock.release()"""
 
 
 if __name__ == '__main__':

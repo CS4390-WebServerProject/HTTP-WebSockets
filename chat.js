@@ -9,13 +9,12 @@ chatInput.addEventListener('keyup', function(ev) {
 		time = hour + ':' + min;
 
 	if (ev.which === 13) {
-		console.log(time + '::' + chatInput.value);
 		chatSocket.send(time + '::' + chatInput.value);
 		chatInput.value = ''
 	}
 
 }, false);
-    
+
 chatSocket.onopen = function(ev) {
     console.log("Socket opened.");
 }
@@ -25,18 +24,25 @@ chatSocket.onmessage = function(ev) {
 		messElInner = document.createElement('div'),
 		timeEl = document.createElement('div');
 
-	messEl.class = 'message';
-	messElInner.class = 'inner';
+	if (ev.data.split(":")[0] == "Ping") {
+		console.log("Recieved Pong.");
+		chatSocket.send("Pong:I am still here.");
+	}
+	else {
+		console.log("Recieved message: " + ev.data);
+		messEl.class = 'message';
+		messElInner.class = 'inner';
 
-	// Parse message
-	var time = ev.data.split('::')[0],
-		mess = ev.data.split('::')[1];
+		// Parse message
+		var time = ev.data.split('::')[0],
+			mess = ev.data.split('::')[1];
 
-	messElInner.textContent = mess;
-	timeEl.textContent = time;
+		messElInner.textContent = mess;
+		timeEl.textContent = time;
 
-	messEl.appendChild(timeEl);
-	messEl.appendChild(messElInner);
+		messEl.appendChild(timeEl);
+		messEl.appendChild(messElInner);
 
-	chatbox.appendChild(messEl);
+		chatbox.appendChild(messEl);
+	}
 }

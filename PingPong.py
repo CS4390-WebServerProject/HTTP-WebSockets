@@ -80,7 +80,7 @@ def handler(clientSock, addr, config):
                 response.addMessage('Date', HTTPDate())
                 response.addMessage('Server', 'PingPongServer')
 
-                if request.message['Connection'] == 'keep-alive':
+                if 'keep-alive' in request.message['Connection']:
                     response.addMessage('Connection', 'keep-alive')
 
                 # Check if client supports gzip encoding
@@ -100,7 +100,7 @@ def handler(clientSock, addr, config):
                 clientSock.sendall(totalResponse.encode('utf-8'))
                 
             if 'Connection' in request.message:
-                if request.message['Connection'] == 'close':
+                if 'close' in request.message['Connection']:
                     print("Connection is closing.")
                     connectionOpen = False
 

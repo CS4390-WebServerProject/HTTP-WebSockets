@@ -64,7 +64,10 @@ class RequestHeader:
                 if mess[0] == 'Accept-Encoding':
                     self.acceptEncodings = mess[1].split(", ")
                 else:
-                    self.message[mess[0]] = mess[1]
+                    if ',' in mess[1]:
+                        self.message[mess[0]] = mess[1].split(", ")
+                    else:
+                        self.message[mess[0]] = [mess[1]]
             else:
                 self.requestFinished = True
 
