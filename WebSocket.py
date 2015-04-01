@@ -113,7 +113,7 @@ class PingPongWebSocket:
 
             for i in range(0, payload):
                 if sys.version_info > (3, 0):
-                    decodedTextIO.write(chr(encodedText[i] ^ maskingKey[i % 4]))
+                    decodedTextIO.write(chr(encodedText[i] ^ maskingKey[i % 4]).encode('utf-8'))
                 else:
                     decodedTextIO.write(chr(ord(encodedText[i]) ^ ord(maskingKey[i % 4])))
 
@@ -138,7 +138,7 @@ class PingPongWebSocket:
         return opCode == opCodeFrame
 
     def sendPing(self, clientSock):
-        pingFrame = self.makeFrame("Are you there?", 0x9);
+        pingFrame = self.makeFrame("Are you there?".encode('utf-8'), 0x9);
         clientSock.sendall(pingFrame);
 
     def makeFrame(self, text, opCode=None, finArg=None):
@@ -163,7 +163,6 @@ class PingPongWebSocket:
 
         if len(text) <= 125 and len(text) >= 0:
             buff.write(s.pack(len(text)))
-            print(buff.getvalue())
         # text can fit within a 16 bit unsigned int
         elif len(text) > 125 and len(text) <= 0xff:
             buff.write(chr(126))
@@ -172,9 +171,7 @@ class PingPongWebSocket:
             buff.write(chr(127))
             buff.write(eE.pack(chr(len(text))))
 
-        #buff.write(text.encode('utf-8'))
-        for ch in text:
-            buff.write(ch.encode('utf-8'))
+        buff.write(text)
 
         resStr = buff.getvalue()
 
@@ -207,6 +204,7 @@ class PingPongWebSocket:
             # Ping client every [msPingDelay] ms after handshake
             if gotHandshake and endPing - startPing >= msPingDelay:
                 if not waitingForPong:
+                    print("Sending ping.")
                     self.sendPing(clientSock)
                     waitingForPong = True
                 elif noPongCount < 3:
@@ -274,6 +272,7 @@ class PingPongWebSocket:
                         else:
                             running = False
                     elif self.hasOpcode(message, 0xA):
+                        print("Recieved pong.")
                         # Pong
                         waitingForPong = False
                         noPongCount = 0
