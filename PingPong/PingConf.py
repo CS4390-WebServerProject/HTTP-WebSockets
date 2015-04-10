@@ -1,40 +1,40 @@
 #!/bin/python
+try:
+    from ConfigParser import ConfigParser
+except ImportError:
+    from configparser import ConfigParser
 
 class PingConf:
+
     def __init__(self, configPath):
-        self.conf = { 'gzip': 'off', 'caching': 'off' }
+        parser = ConfigParser()
+        parser.read(configPath)
+        self.config = {}
 
-        lineCount = 1
-        try:
-            with open(configPath) as f:
-                for line in f:
-                    # Ignore comments
-                    if line[0] != '#':
-                        # Makes sure config lines end with semicolon
-                        if line[len(line)-1] == ';':
-                            line = line[:-1]
-                            
-                            # Make sure line is not empty
-                            if line != '':
-                                keyValue = line.split(' ')
-                                # Get key and value
-                                key = keyValue[0]
-                                value = keyValue[1]
+        # Read sections
+        for section in parser.sections():
+            sectionName = section
+            # Create new section
+            if parser.has_option(section, 'port'):
+                port = parser.get(section, 'port')
+                if port != '80':
+                    sectionName += ':' + parser.get(section, 'port')
 
-                                # Check to make sure it's a valid key
-                                if self.defaults.has_key(key):
-                                    # Check to make sure value is valid
-                                    if value == 'off' or value == 'on':
-                                        # Add to configuration
-                                        self.conf[key] = value
-                                    else:
-                                        raise SyntaxError("Invalid value '{0}' on line {1} in {2}.".format(value, lineCount, configPath))
-                                else:
-                                    raise SyntaxError("Invalid key'{0}' on line {1} in {2}.".format(key, lineCount, configPath))
-                            else:
-                                raise SyntaxError("Empty line with semicolon at {1} in {2}.".format(lineCount, configPath))
+            self.config[sectionName] = {}
 
-                    # Increment line count
-                    lineCount += 1
-        except IOError:
-            print("Config {0} does not exist.".format(configPath))
+            # Populate with options
+            options = parser.options(section)
+            for option in options:
+                self.config[sectionName][option] = parser.get(section, option)
+
+    def hasHost(self, host):
+        print(host)
+        if host in self.config:
+            return True
+        return False
+
+    def getConfig(self, host, option):
+        if option in self.config[host]:
+            return self.config[host][option]
+        else:
+            return None

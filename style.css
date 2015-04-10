@@ -43,3 +43,57 @@ p {
 #container {
 	padding: 10px 15px;
 }
+
+#chatbox {
+    background: #333;
+    height: 300px;
+    overflow: auto;
+}
+
+#chatbox .message {
+    color: #eee;
+    font-size: 13px;
+    padding: 10px 15px;
+    overflow: hidden;
+}
+
+#chatbox .message:nth-child(odd) {
+    background: rgba(255, 255, 255, .02);
+}
+
+#chatbox .name {
+    color: #bbb;
+}
+
+#chatbox .message .inner,.time,.name {
+    float: left;
+    padding-right: 10px;
+}
+
+#chat-wrapper {
+    background: #222;
+}
+
+#chat-wrapper h1 {
+    font-size: 24px;
+    color: #fff;
+    letter-spacing: 2px;
+    padding: 5px 10px;
+    font-weight: 300;
+}
+
+#chatbox .time {
+    color: #aaa;
+}
+
+#chat-input-wrapper {
+    padding: 10px 15px;
+}
+
+#chat-input {
+    width: 100%;
+    background: none;
+    border: none;
+    outline: none;
+    color: #fff;
+}

@@ -9,11 +9,17 @@ from PingPong.Header import RequestHeader, ResponseHeader
 from base64 import b64encode
 from hashlib import sha1
 try:
-    from StringIO import StringIO, BytesIO
+    from StringIO import BytesIO
 except ImportError:
-    from io import StringIO, BytesIO
+    from io import BytesIO
 
 class PingPongWebSocket:
+
+    TEXT = 0x1
+    BINARY = 0x2
+    CLOSE = 0x8
+    PING = 0x9
+    PONG = 0xA
 
     def __init__(self, hostname, uri, port=None):
         if port is None:
@@ -34,6 +40,7 @@ class PingPongWebSocket:
 
 
     def start(self):
+        """Main function to be called """
         # Create socket
         self.serverSocket.listen(4)
 
@@ -45,7 +52,7 @@ class PingPongWebSocket:
                 # List is thread-safe
                 self.clients.append(clientSock)
 
-                t = threading.Thread(target=self.handler, args=(clientSock, len(self.clients),))
+                t = threading.Thread(target=self.handler, args=(clientSock, len(self.clients) - 1,))
                 self.threads.append(t)
                 t.start()
             except KeyboardInterrupt:
@@ -58,6 +65,7 @@ class PingPongWebSocket:
         self.serverSocket.close()
 
     def parseFrame(self, frame):
+        """From a web socket frame from client, return the text/binary"""
         buff = BytesIO(frame)
 
         # Char
@@ -81,10 +89,10 @@ class PingPongWebSocket:
         finBit = (finOp & 128) >> 7
         opCode = finOp & 0x0f
 
-        if opCode == 0x8:
+        if opCode == self.PING:
             buff.close()
             return None
-        elif opCode == 0xA:
+        elif opCode == self.PONG:
             # Pong reply
             return [opCode, True]
         else:
@@ -103,7 +111,8 @@ class PingPongWebSocket:
             elif payload == 127:
                 extendedPayload = longStruct.unpack(buff.read(8))[0]
 
-            payload = extendedPayload + payload
+            if payload == 126 or payload == 127:
+                payload = extendedPayload
 
             maskingKey = buff.read(4)
 
@@ -127,6 +136,7 @@ class PingPongWebSocket:
 
 
     def hasOpcode(self, frame, opCode):
+        """Checks a web socket frame's opcode and returns True or False if matching opCode"""
         if sys.version_info > (3, 0):
             finOp = frame[0]
         else:
@@ -138,10 +148,12 @@ class PingPongWebSocket:
         return opCode == opCodeFrame
 
     def sendPing(self, clientSock):
+        """Generates a Web Socket ping frame to send to client, expecting a pong back."""
         pingFrame = self.makeFrame("Are you there?".encode('utf-8'), 0x9);
         clientSock.sendall(pingFrame);
 
     def makeFrame(self, text, opCode=None, finArg=None):
+        """Generates Web Socket frame to send to client"""
         buff = BytesIO()
 
         fin = True if (finArg == None or finArg == True) else False
@@ -151,24 +163,24 @@ class PingPongWebSocket:
             opCode = 0x1 if fin else 0x0
 
         # 8 bit
-        s = struct.Struct('>B')
+        s = struct.Struct('!B')
 
         # 16 bit
-        eP = struct.Struct('>2s')
+        eP = struct.Struct('!H')
 
         # 64 bit
-        eE = struct.Struct('>8s')
+        eE = struct.Struct('!Q')
 
         buff.write(s.pack(finBit + opCode))
 
         if len(text) <= 125 and len(text) >= 0:
             buff.write(s.pack(len(text)))
         # text can fit within a 16 bit unsigned int
-        elif len(text) > 125 and len(text) <= 0xff:
-            buff.write(chr(126))
+        elif len(text) > 125 and len(text) <= 0xffff:
+            buff.write(s.pack(126))
             buff.write(eP.pack(len(text)))
-        elif len(text) > 125 and len(text) <= 0xffffffff:
-            buff.write(chr(127))
+        elif len(text) > 125 and len(text) <= 0xffffffffffffffff:
+            buff.write(s.pack(127))
             buff.write(eE.pack(chr(len(text))))
 
         buff.write(text)
@@ -260,7 +272,7 @@ class PingPongWebSocket:
                     else:
                         running = False
                 else:
-                    if self.hasOpcode(message, 0x1):
+                    if self.hasOpcode(message, self.TEXT):
                         print("Got message!")
                         text = self.parseFrame(message)
                         if text != None:
@@ -271,25 +283,22 @@ class PingPongWebSocket:
                                         print("Uh oh! Error sending!")
                         else:
                             running = False
-                    elif self.hasOpcode(message, 0xA):
+                    elif self.hasOpcode(message, self.PONG):
                         print("Recieved pong.")
                         # Pong
                         waitingForPong = False
                         noPongCount = 0
-                    elif self.hasOpcode(message, 0x8):
+                    elif self.hasOpcode(message, self.CLOSE):
                         running = False
 
-
-        clientSock.close();
         print("Closing...")
-        """
+        clientSock.close();
         self.lock.acquire()
         try:
             # Remove socket from client list
-            self.clients.pop(index - self.indexOffset - 1)
-            self.indexOffset += 1
+            del self.clients[index];
         finally:
-            self.lock.release()"""
+            self.lock.release()
 
 
 if __name__ == '__main__':
